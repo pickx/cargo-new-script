@@ -18,7 +18,7 @@ Currently, only unix operating systems are supported.
 cargo new-script my-script
 ```
 
-This generates:
+This generates a file called `my-script.rs` in your current working directory:
 
 ```rust
 #!/usr/bin/env -S cargo +nightly -Zscript
