@@ -7,16 +7,24 @@ use clap::{Args, Parser};
 
 fn main() -> anyhow::Result<()> {
     let args = NewScriptCli::parse().args();
+    let include_shebang = !args.no_shebang;
+    let include_frontmatter = !args.no_frontmatter;
 
     let mut script = File::create_new(format!("{}.rs", args.script_name))
         .context("Failed to create script file")?;
 
-    if !args.no_shebang {
-        writeln!(script, "{}", shebang(!args.stable))?;
-    }
-
-    if !args.no_frontmatter {
-        writeln!(script, "{}\n", frontmatter())?;
+    match (include_shebang, include_frontmatter) {
+        (true, true) => {
+            writeln!(script, "{}", shebang(!args.stable))?;
+            writeln!(script, "{}\n", frontmatter())?;
+        }
+        (true, false) => {
+            writeln!(script, "{}\n", shebang(!args.stable))?;
+        }
+        (false, true) => {
+            writeln!(script, "{}\n", frontmatter())?;
+        }
+        (false, false) => {}
     }
 
     writeln!(script, "{}", main_function())?;
