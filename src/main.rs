@@ -16,13 +16,13 @@ fn main() -> anyhow::Result<()> {
     match (include_shebang, include_frontmatter) {
         (true, true) => {
             writeln!(script, "{}", shebang(!args.stable, !args.verbose_script))?;
-            writeln!(script, "{}\n", frontmatter())?;
+            writeln!(script, "{}\n", frontmatter(args.release))?;
         }
         (true, false) => {
             writeln!(script, "{}\n", shebang(!args.stable, !args.verbose_script))?;
         }
         (false, true) => {
-            writeln!(script, "{}\n", frontmatter())?;
+            writeln!(script, "{}\n", frontmatter(args.release))?;
         }
         (false, false) => {}
     }
@@ -47,11 +47,31 @@ fn shebang(nightly: bool, quiet: bool) -> String {
     format!("#!/usr/bin/env {cargo_invocation}{quiet_arg}")
 }
 
-fn frontmatter() -> &'static str {
-    "---
-[dependencies]
+fn frontmatter(release_profile: bool) -> String {
+    let mut buf = String::new();
+    
+    buf.push_str("---\n");
+    buf.push_str("[dependencies]\n\n");
 
----"
+    if release_profile {
+        buf.push_str("[profile.dev]\n");
+        buf.push_str(release_profile_settings());
+    }
+
+    buf.push_str("---");
+
+    buf
+}
+
+fn release_profile_settings() -> &'static str {
+    r#"opt-level = 3
+debug = false
+debuginfo = "None"
+debug-assertions = false
+overflow-checks = false
+incremental = false
+codegen-units = 16
+"#
 }
 
 fn main_function() -> &'static str {
@@ -88,6 +108,10 @@ struct NewSciptArgs {
     /// Do not add `--quiet` to shebang line. `cargo` log messages will not be suppressed when the script is executed.
     #[arg(long, conflicts_with("no_shebang"))]
     verbose_script: bool,
+
+    /// Generate default `release` profile settings, simulating the optimizations of release mode.
+    #[arg(long, conflicts_with("no_frontmatter"))]
+    release: bool,
 }
 
 impl NewScriptCli {
