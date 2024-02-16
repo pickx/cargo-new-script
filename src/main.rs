@@ -79,7 +79,7 @@ struct NewSciptArgs {
     no_shebang: bool,
 
     /// Create a shebang line that uses the stable toolchain. Currently, this does not generate a runnable script because `cargo script` requires nightly.
-    #[arg(long)]
+    #[arg(long, conflicts_with("no_shebang"))]
     stable: bool,
 }
 
