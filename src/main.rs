@@ -15,11 +15,11 @@ fn main() -> anyhow::Result<()> {
 
     match (include_shebang, include_frontmatter) {
         (true, true) => {
-            writeln!(script, "{}", shebang(!args.stable))?;
+            writeln!(script, "{}", shebang(!args.stable, !args.verbose_script))?;
             writeln!(script, "{}\n", frontmatter())?;
         }
         (true, false) => {
-            writeln!(script, "{}\n", shebang(!args.stable))?;
+            writeln!(script, "{}\n", shebang(!args.stable, !args.verbose_script))?;
         }
         (false, true) => {
             writeln!(script, "{}\n", frontmatter())?;
@@ -36,12 +36,15 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn shebang(nightly: bool) -> &'static str {
-    if nightly {
-        "#!/usr/bin/env -S cargo +nightly -Zscript"
+fn shebang(nightly: bool, quiet: bool) -> String {
+    let cargo_invocation = if nightly {
+        "-S cargo +nightly -Zscript"
     } else {
-        "#!/usr/bin/env cargo"
-    }
+        "cargo"
+    };
+    let quiet_arg = if quiet { " --quiet" } else { "" };
+
+    format!("#!/usr/bin/env {cargo_invocation}{quiet_arg}")
 }
 
 fn frontmatter() -> &'static str {
@@ -81,6 +84,10 @@ struct NewSciptArgs {
     /// Create a shebang line that uses the stable toolchain. Currently, this does not generate a runnable script because `cargo script` requires nightly.
     #[arg(long, conflicts_with("no_shebang"))]
     stable: bool,
+
+    /// Do not add `--quiet` to shebang line. `cargo` log messages will not be suppressed when the script is executed.
+    #[arg(long, conflicts_with("no_shebang"))]
+    verbose_script: bool,
 }
 
 impl NewScriptCli {
