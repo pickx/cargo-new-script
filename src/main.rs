@@ -49,8 +49,9 @@ fn shebang(nightly: bool, quiet: bool) -> String {
 
 fn frontmatter(release_profile: bool) -> String {
     let mut buf = String::new();
-    
+
     buf.push_str("---\n");
+    buf.push_str(edition());
     buf.push_str("[dependencies]\n\n");
 
     if release_profile {
@@ -61,6 +62,10 @@ fn frontmatter(release_profile: bool) -> String {
     buf.push_str("---");
 
     buf
+}
+
+fn edition() -> &'static str {
+    "[package]\nedition = \"2021\"\n\n"
 }
 
 fn release_profile_settings() -> &'static str {
