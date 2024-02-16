@@ -15,11 +15,11 @@ fn main() -> anyhow::Result<()> {
 
     match (include_shebang, include_frontmatter) {
         (true, true) => {
-            writeln!(script, "{}", shebang(!args.stable, args.quiet))?;
+            writeln!(script, "{}", shebang(!args.stable, !args.verbose_script))?;
             writeln!(script, "{}\n", frontmatter())?;
         }
         (true, false) => {
-            writeln!(script, "{}\n", shebang(!args.stable, args.quiet))?;
+            writeln!(script, "{}\n", shebang(!args.stable, !args.verbose_script))?;
         }
         (false, true) => {
             writeln!(script, "{}\n", frontmatter())?;
@@ -85,8 +85,9 @@ struct NewSciptArgs {
     #[arg(long)]
     stable: bool,
 
+    /// Do not add `--quiet` to shebang line. `cargo` log messages will not be suppressed when the script is executed.
     #[arg(long, conflicts_with("no_shebang"))]
-    quiet: bool,
+    verbose_script: bool,
 }
 
 impl NewScriptCli {
