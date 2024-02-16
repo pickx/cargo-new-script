@@ -42,7 +42,7 @@ fn shebang(nightly: bool, quiet: bool) -> String {
     } else {
         "cargo"
     };
-    let quiet_arg = quiet.then_some(" --quiet").unwrap_or("");
+    let quiet_arg = if quiet { " --quiet" } else { "" };
 
     format!("#!/usr/bin/env {cargo_invocation}{quiet_arg}")
 }
