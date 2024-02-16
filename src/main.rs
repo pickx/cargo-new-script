@@ -71,7 +71,6 @@ fn edition() -> &'static str {
 fn release_profile_settings() -> &'static str {
     r#"opt-level = 3
 debug = false
-debuginfo = "None"
 debug-assertions = false
 overflow-checks = false
 incremental = false
