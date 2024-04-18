@@ -88,12 +88,12 @@ fn main_function() -> &'static str {
 #[command(name = "cargo")]
 #[command(bin_name = "cargo")]
 enum NewScriptCli {
-    NewScript(NewSciptArgs),
+    NewScript(NewScriptArgs),
 }
 
 #[derive(Debug, Args)]
 #[command(version, about, long_about = None)]
-struct NewSciptArgs {
+struct NewScriptArgs {
     /// Name of the new cargo script without the `.rs` extension
     script_name: String,
 
@@ -119,7 +119,7 @@ struct NewSciptArgs {
 }
 
 impl NewScriptCli {
-    fn args(self) -> NewSciptArgs {
+    fn args(self) -> NewScriptArgs {
         match self {
             NewScriptCli::NewScript(args) => args,
         }
