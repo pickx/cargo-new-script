@@ -1,7 +1,8 @@
-use anyhow::{bail, Context};
+use anyhow::bail;
 use clap::{Args, Parser};
 use std::fmt::Write;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
+use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
@@ -28,16 +29,26 @@ fn main() -> anyhow::Result<()> {
 
     writeln!(script, "{}", main_function())?;
 
-    write_script_to_file(&args.script_name, &script)
+    write_script_to_file(&args.script_name, &script, args.overwrite)
 }
 
-fn write_script_to_file(script_name: &str, contents: &str) -> anyhow::Result<()> {
+fn write_script_to_file(script_name: &str, contents: &str, overwrite: bool) -> anyhow::Result<()> {
     let mut path_to_new_file = PathBuf::from(script_name);
 
     // accept names that end with `.rs` and just set the extension regardless
     path_to_new_file.set_extension("rs");
 
-    let mut file = File::create_new(&path_to_new_file).context("failed to create script file")?;
+    let mut file = open_options(overwrite)
+        .open(&path_to_new_file)
+        .map_err(|e| {
+            let context = if e.kind() == ErrorKind::AlreadyExists {
+                "failed to create script file - file already exists. consider using `--overwrite`"
+            } else {
+                "failed to create script file"
+            };
+
+            anyhow::Error::new(e).context(context)
+        })?;
 
     let write_result = std::io::Write::write_all(&mut file, contents.as_bytes());
     if write_result.is_err() {
@@ -52,6 +63,20 @@ fn write_script_to_file(script_name: &str, contents: &str) -> anyhow::Result<()>
     file.set_permissions(permissions)?;
 
     Ok(())
+}
+
+fn open_options(overwrite: bool) -> OpenOptions {
+    let mut options = File::options();
+    let handle = &mut options;
+
+    handle.read(true).write(true);
+    if overwrite {
+        handle.truncate(true).create(true)
+    } else {
+        handle.create_new(true)
+    };
+
+    options
 }
 
 fn shebang(nightly: bool, quiet: bool) -> String {
@@ -122,6 +147,10 @@ struct NewScriptArgs {
     /// Do not include the shebang line
     #[arg(long)]
     no_shebang: bool,
+
+    /// Overwrite target file if it already exists
+    #[arg(long)]
+    overwrite: bool,
 
     /// Create a shebang line that uses the stable toolchain. Currently, this does not generate a runnable script because `cargo script` requires nightly.
     #[arg(long, conflicts_with("no_shebang"))]
