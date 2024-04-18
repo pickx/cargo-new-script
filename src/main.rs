@@ -19,7 +19,7 @@ fn main() -> anyhow::Result<()> {
 
     // validates template early on, to avoid unneccessary work
     let template = if let Some(path) = args.template {
-        let template = Template::open(path)?;
+        let template = Template::open(path, args.prune_dependencies)?;
         Some(template)
     } else {
         None
@@ -178,6 +178,10 @@ struct NewScriptArgs {
     /// Converts an existing (single-file) Rust program to a `cargo-script`, copying its source code and dependencies
     #[arg(long, short, value_name = "PATH", conflicts_with("no_frontmatter"))]
     template: Option<PathBuf>,
+
+    /// Remove unused dependencies from an exported script's dependencies. Requires `cargo-udeps`, which currently requires nightly
+    #[arg(long, requires("template"))]
+    prune_dependencies: bool,
 
     /// Create a shebang line that uses the stable toolchain. Currently, this does not generate a runnable script because `cargo script` requires nightly.
     #[arg(long, conflicts_with("no_shebang"))]
