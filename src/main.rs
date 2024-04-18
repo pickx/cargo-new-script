@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{bail, Context};
 use clap::{Args, Parser};
 use std::fmt::Write;
 use std::fs::File;
@@ -37,10 +37,15 @@ fn write_script_to_file(script_name: &str, contents: &str) -> anyhow::Result<()>
     // accept names that end with `.rs` and just set the extension regardless
     path_to_new_file.set_extension("rs");
 
-    let mut file = File::create_new(path_to_new_file).context("failed to create script file")?;
+    let mut file = File::create_new(&path_to_new_file).context("failed to create script file")?;
 
-    std::io::Write::write_all(&mut file, contents.as_bytes())
-        .context("error while writing to newly-created script")?;
+    let write_result = std::io::Write::write_all(&mut file, contents.as_bytes());
+    if write_result.is_err() {
+        // try and clean up, since file is probably fubar
+        // since we're gonna bail immediately after this, let's just ignore the error here
+        let _ = std::fs::remove_file(path_to_new_file);
+        bail!("error while writing to newly-created script");
+    }
 
     let mut permissions = file.metadata()?.permissions();
     permissions.set_mode(0o755);
