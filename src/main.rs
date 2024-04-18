@@ -5,6 +5,7 @@ use std::fs::{File, OpenOptions};
 use std::io::ErrorKind;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use toml::Table;
 
 fn main() -> anyhow::Result<()> {
     let args = NewScriptCli::parse().args();
@@ -19,8 +20,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     if include_frontmatter {
-        let frontmatter = frontmatter(args.release);
-        writeln!(script, "{frontmatter}\n")?;
+        let frontmatter_toml = frontmatter_toml(args.release);
+        writeln!(script, "---")?;
+        write!(script, "{frontmatter_toml}")?; // the `toml` Display impl already terminates with a newline
+        writeln!(script, "---")?;
     }
 
     writeln!(script, "{}", main_function())?;
@@ -86,35 +89,31 @@ fn shebang(nightly: bool, quiet: bool) -> String {
     format!("#!/usr/bin/env {cargo_invocation}{quiet_arg}")
 }
 
-fn frontmatter(release_profile: bool) -> String {
-    let mut buf = String::new();
+fn frontmatter_toml(release_profile: bool) -> Table {
+    let mut root = Table::new();
 
-    buf.push_str("---\n");
-    buf.push_str(edition());
-    buf.push_str("[dependencies]\n\n");
+    let package = Table::from_iter([("edition".into(), "2021".into())]);
+    root.insert("package".into(), package.into());
+
+    // output an empty dependencies header
+    let deps = Table::new();
+    root.insert("dependencies".into(), deps.into());
 
     if release_profile {
-        buf.push_str("[profile.dev]\n");
-        buf.push_str(release_profile_settings());
+        let dev = Table::from_iter([
+            ("opt-level".into(), 3.into()),
+            ("debug".into(), false.into()),
+            ("debug-assertions".into(), false.into()),
+            ("overflow-checks".into(), false.into()),
+            ("incremental".into(), false.into()),
+            ("codegen-units".into(), 16.into()),
+        ]);
+        let mut profile = Table::new();
+        profile.insert("dev".into(), dev.into());
+        root.insert("profile".into(), profile.into());
     }
 
-    buf.push_str("---");
-
-    buf
-}
-
-fn edition() -> &'static str {
-    "[package]\nedition = \"2021\"\n\n"
-}
-
-fn release_profile_settings() -> &'static str {
-    r#"opt-level = 3
-debug = false
-debug-assertions = false
-overflow-checks = false
-incremental = false
-codegen-units = 16
-"#
+    root
 }
 
 fn main_function() -> &'static str {
