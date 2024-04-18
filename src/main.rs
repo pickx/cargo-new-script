@@ -13,18 +13,14 @@ fn main() -> anyhow::Result<()> {
 
     let mut script = String::new();
 
-    match (include_shebang, include_frontmatter) {
-        (true, true) => {
-            writeln!(script, "{}", shebang(!args.stable, !args.verbose_script))?;
-            writeln!(script, "{}\n", frontmatter(args.release))?;
-        }
-        (true, false) => {
-            writeln!(script, "{}\n", shebang(!args.stable, !args.verbose_script))?;
-        }
-        (false, true) => {
-            writeln!(script, "{}\n", frontmatter(args.release))?;
-        }
-        (false, false) => {}
+    if include_shebang {
+        let shebang = shebang(!args.stable, !args.verbose_script);
+        writeln!(script, "{shebang}")?;
+    }
+
+    if include_frontmatter {
+        let frontmatter = frontmatter(args.release);
+        writeln!(script, "{frontmatter}\n")?;
     }
 
     writeln!(script, "{}", main_function())?;
