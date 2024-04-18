@@ -1,17 +1,16 @@
-use std::fs::File;
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-
 use anyhow::Context;
 use clap::{Args, Parser};
+use std::fmt::Write;
+use std::fs::File;
+use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
 
 fn main() -> anyhow::Result<()> {
     let args = NewScriptCli::parse().args();
     let include_shebang = !args.no_shebang;
     let include_frontmatter = !args.no_frontmatter;
 
-    let mut script = File::create_new(format!("{}.rs", args.script_name))
-        .context("Failed to create script file")?;
+    let mut script = String::new();
 
     match (include_shebang, include_frontmatter) {
         (true, true) => {
@@ -29,9 +28,20 @@ fn main() -> anyhow::Result<()> {
 
     writeln!(script, "{}", main_function())?;
 
-    let mut permissions = script.metadata()?.permissions();
+    write_script_to_file(&args.script_name, &script)
+}
+
+fn write_script_to_file(script_name: &str, contents: &str) -> anyhow::Result<()> {
+    let path_to_new_file = PathBuf::from(script_name);
+
+    let mut file = File::create_new(path_to_new_file).context("failed to create script file")?;
+
+    std::io::Write::write_all(&mut file, contents.as_bytes())
+        .context("error while writing to newly-created script")?;
+
+    let mut permissions = file.metadata()?.permissions();
     permissions.set_mode(0o755);
-    script.set_permissions(permissions)?;
+    file.set_permissions(permissions)?;
 
     Ok(())
 }
