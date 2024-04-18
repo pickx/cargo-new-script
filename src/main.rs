@@ -1,10 +1,13 @@
+mod template;
+
 use anyhow::bail;
 use clap::{Args, Parser};
 use std::fmt::Write;
 use std::fs::{File, OpenOptions};
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use template::Template;
 use toml::Table;
 
 fn main() -> anyhow::Result<()> {
@@ -14,19 +17,37 @@ fn main() -> anyhow::Result<()> {
 
     let mut script = String::new();
 
+    // validates template early on, to avoid unneccessary work
+    let template = if let Some(path) = args.template {
+        let template = Template::open(path)?;
+        Some(template)
+    } else {
+        None
+    };
+
     if include_shebang {
         let shebang = shebang(!args.stable, !args.verbose_script);
         writeln!(script, "{shebang}")?;
     }
 
     if include_frontmatter {
-        let frontmatter_toml = frontmatter_toml(args.release);
+        let template_manifest = template
+            .as_ref()
+            .map(Template::deserialize_manifest)
+            .transpose()?;
+
+        let frontmatter_toml = frontmatter_toml(args.release, template_manifest);
         writeln!(script, "---")?;
         write!(script, "{frontmatter_toml}")?; // the `toml` Display impl already terminates with a newline
         writeln!(script, "---")?;
     }
 
-    writeln!(script, "{}", main_function())?;
+    if let Some(mut template) = template {
+        template.file.read_to_string(&mut script)?;
+    } else {
+        let main = main_function();
+        writeln!(script, "{main}")?;
+    }
 
     write_script_to_file(&args.script_name, &script, args.overwrite)
 }
@@ -89,14 +110,21 @@ fn shebang(nightly: bool, quiet: bool) -> String {
     format!("#!/usr/bin/env {cargo_invocation}{quiet_arg}")
 }
 
-fn frontmatter_toml(release_profile: bool) -> Table {
+/// currently, we only use the template manifest's `dependencies`.
+fn frontmatter_toml(release_profile: bool, template_manifest: Option<Table>) -> Table {
     let mut root = Table::new();
 
     let package = Table::from_iter([("edition".into(), "2021".into())]);
     root.insert("package".into(), package.into());
 
-    // output an empty dependencies header
-    let deps = Table::new();
+    // if dependencies can be found, use that. otherwise output an empty dependencies header
+    //
+    // TODO: given a dependency with an inline table as value, such as "clap = { version = "4.5.0", features = ["derive"] }"
+    // `toml` will (by design) not preserve the formatting and will serialize it as `[dependencies.clap]`
+    // that's still valid and will compile just fine. if we can care we can use `toml_edit`.
+    let deps = template_manifest
+        .and_then(|manifest| manifest.get("dependencies")?.as_table().cloned())
+        .unwrap_or_default();
     root.insert("dependencies".into(), deps.into());
 
     if release_profile {
@@ -146,6 +174,10 @@ struct NewScriptArgs {
     /// Overwrite target file if it already exists
     #[arg(long)]
     overwrite: bool,
+
+    /// Converts an existing (single-file) Rust program to a `cargo-script`, copying its source code and dependencies
+    #[arg(long, short, value_name = "PATH", conflicts_with("no_frontmatter"))]
+    template: Option<PathBuf>,
 
     /// Create a shebang line that uses the stable toolchain. Currently, this does not generate a runnable script because `cargo script` requires nightly.
     #[arg(long, conflicts_with("no_shebang"))]
