@@ -32,7 +32,10 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn write_script_to_file(script_name: &str, contents: &str) -> anyhow::Result<()> {
-    let path_to_new_file = PathBuf::from(script_name);
+    let mut path_to_new_file = PathBuf::from(script_name);
+
+    // accept names that end with `.rs` and just set the extension regardless
+    path_to_new_file.set_extension("rs");
 
     let mut file = File::create_new(path_to_new_file).context("failed to create script file")?;
 
@@ -104,7 +107,7 @@ enum NewScriptCli {
 #[derive(Debug, Args)]
 #[command(version, about, long_about = None)]
 struct NewScriptArgs {
-    /// Name of the new cargo script without the `.rs` extension
+    /// Name of the new cargo script, with or without the `.rs` extension
     script_name: String,
 
     /// Do not include the frontmatter section
