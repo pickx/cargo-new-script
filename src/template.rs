@@ -1,11 +1,13 @@
 mod parsers;
+mod strip_decor;
 
 use anyhow::{bail, ensure, Context};
+use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::Command;
-use toml::Table;
+use toml_edit::DocumentMut;
 
 pub(crate) struct Template {
     pub file: File,
@@ -43,12 +45,11 @@ impl Template {
         Ok(template)
     }
 
-    pub fn deserialize_manifest(&self) -> anyhow::Result<Table> {
+    pub fn deserialize_manifest(&self) -> anyhow::Result<DocumentMut> {
         let manifest_path = self.locate_manifest()?;
-        let manifest = std::fs::read_to_string(manifest_path)?;
+        let mut manifest: DocumentMut = std::fs::read_to_string(manifest_path)?.parse()?;
 
-        let mut manifest =
-            toml::from_str(&manifest).context("could not deserialize project manifest")?;
+        strip_decor::strip_decor(&mut manifest);
 
         if self.prune_dependencies {
             self.prune_unused_deps(&mut manifest)?;
@@ -74,12 +75,7 @@ impl Template {
             .context("unexpected output from cargo locate-manifest")
     }
 
-    fn prune_unused_deps(&self, manifest: &mut Table) -> anyhow::Result<()> {
-        let Some(deps) = parsers::non_empty_dependencies_table(manifest) else {
-            // no dependencies, nothing to prune
-            return Ok(());
-        };
-
+    fn prune_unused_deps(&self, manifest: &mut DocumentMut) -> anyhow::Result<()> {
         // XXX: from here on, if something fails, then I guess we can just not prune anything,
         // instead of bubbling up the error and exiting
 
@@ -93,7 +89,20 @@ impl Template {
 
         let unused_deps = parsers::parse_udeps_stdout(&output.stdout)
             .context("unexpected output from cargo-udeps")?;
-        deps.retain(|dep_name, _| !unused_deps.contains(dep_name));
+
+        let mut prune = |deps_set_name: &str, unused_deps: BTreeSet<String>| {
+            if let Some(deps_set) = manifest
+                .get_mut(deps_set_name)
+                .and_then(toml_edit::Item::as_table_mut)
+            {
+                deps_set.retain(|name, _| !unused_deps.contains(name));
+            }
+        };
+
+        prune("dependencies", unused_deps.normal);
+        prune("dev-dependencies", unused_deps.development);
+        prune("build-dependencies", unused_deps.build);
+
         Ok(())
     }
 }

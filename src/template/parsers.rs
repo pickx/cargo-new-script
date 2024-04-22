@@ -1,8 +1,7 @@
 use anyhow::{bail, Context};
 use serde::Deserialize;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
-use toml::Table;
 
 pub fn parse_locate_project_stdout(stdout: &[u8]) -> Option<PathBuf> {
     let json: serde_json::Value = serde_json::from_slice(stdout).ok()?;
@@ -15,17 +14,18 @@ pub fn parse_locate_project_stdout(stdout: &[u8]) -> Option<PathBuf> {
 /// simplified from <https://github.com/rust-lang/cargo/blob/852a31615d8ad66cf9768e16ef50119806629027/src/bin/cargo/commands/locate_project.rs#L24>
 #[derive(Deserialize)]
 struct ProjectLocation {
-    root: String,
+    pub root: String,
 }
 
-pub fn parse_udeps_stdout(stdout: &[u8]) -> Option<HashSet<String>> {
+pub fn parse_udeps_stdout(stdout: &[u8]) -> Option<OutcomeUnusedDeps> {
     let json = serde_json::from_slice::<serde_json::Value>(stdout).ok()?;
 
     // when this is `true`, `unused_deps` is going to be an empty object,
     // so there's no point in continuing here
     let success = json.get("success")?.as_bool()?;
     if success {
-        return Some(HashSet::new());
+        let empty = OutcomeUnusedDeps::default();
+        return Some(empty);
     }
 
     // XXX: a fragile kludge. I don't really know what I'm doing.
@@ -36,15 +36,7 @@ pub fn parse_udeps_stdout(stdout: &[u8]) -> Option<HashSet<String>> {
         .next()?
         .to_owned();
 
-    let outcome: OutcomeUnusedDeps = serde_json::from_value(outcome).ok()?;
-
-    let unused_deps = outcome
-        .build
-        .into_iter()
-        .chain(outcome.development)
-        .chain(outcome.normal)
-        .collect();
-    Some(unused_deps)
+    serde_json::from_value(outcome).ok()
 }
 
 /// some shallow attempts at detecting errors
@@ -56,6 +48,8 @@ pub fn check_udeps_stderr(stderr: Vec<u8>) -> anyhow::Result<()> {
 
     if stderr.starts_with("error: no such command") {
         bail!("{preamble} - is cargo-udeps installed?")
+    } else if stderr.starts_with("error: failed to write") {
+        bail!("{preamble} - permission error")
     } else if stderr.contains("nightly compiler") {
         bail!("{preamble} - are you using a nightly toolchain?")
     }
@@ -64,16 +58,9 @@ pub fn check_udeps_stderr(stderr: Vec<u8>) -> anyhow::Result<()> {
 }
 
 /// simplified from <https://github.com/est31/cargo-udeps/blob/44e6e220ba90ff81d0777aeef45b7b8022dd120a/src/lib.rs#L1041>
-#[derive(Deserialize)]
-struct OutcomeUnusedDeps {
-    normal: Vec<String>,
-    development: Vec<String>,
-    build: Vec<String>,
-}
-
-pub fn non_empty_dependencies_table(manifest: &mut Table) -> Option<&mut Table> {
-    manifest
-        .get_mut("dependencies")
-        .and_then(toml::Value::as_table_mut)
-        .filter(|table| !table.is_empty())
+#[derive(Deserialize, Default)]
+pub struct OutcomeUnusedDeps {
+    pub normal: BTreeSet<String>,
+    pub development: BTreeSet<String>,
+    pub build: BTreeSet<String>,
 }

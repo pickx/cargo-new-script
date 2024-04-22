@@ -8,7 +8,7 @@ use std::io::{ErrorKind, Read};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use template::Template;
-use toml::Table;
+use toml_edit::DocumentMut;
 
 fn main() -> anyhow::Result<()> {
     let args = NewScriptCli::parse().args();
@@ -111,37 +111,42 @@ fn shebang(nightly: bool, quiet: bool) -> String {
 }
 
 /// currently, we only use the template manifest's `dependencies`.
-fn frontmatter_toml(release_profile: bool, template_manifest: Option<Table>) -> Table {
-    let mut root = Table::new();
+fn frontmatter_toml(release_profile: bool, template_manifest: Option<DocumentMut>) -> DocumentMut {
+    use toml_edit::{table, value};
 
-    let package = Table::from_iter([("edition".into(), "2021".into())]);
-    root.insert("package".into(), package.into());
+    let mut root = DocumentMut::new();
 
-    // if dependencies can be found, use that. otherwise output an empty dependencies header
-    //
-    // TODO: given a dependency with an inline table as value, such as "clap = { version = "4.5.0", features = ["derive"] }"
-    // `toml` will (by design) not preserve the formatting and will serialize it as `[dependencies.clap]`
-    // that's still valid and will compile just fine. if we can care we can use `toml_edit`.
-    let deps = template_manifest
-        .and_then(|manifest| manifest.get("dependencies")?.as_table().cloned())
-        .unwrap_or_default();
-    root.insert("dependencies".into(), deps.into());
+    let mut package = table();
+    package["edition"] = value("2021");
+    root["package"] = package;
+
+    if let Some(manifest) = template_manifest {
+        clone_if_exists(&manifest, &mut root, "dependencies");
+        clone_if_exists(&manifest, &mut root, "dev-dependencies");
+        clone_if_exists(&manifest, &mut root, "build-dependencies");
+    } else {
+        // since the user is not using at emplate, an empty `dependencies` table is a useful default
+        root["dependencies"] = table();
+    };
 
     if release_profile {
-        let dev = Table::from_iter([
-            ("opt-level".into(), 3.into()),
-            ("debug".into(), false.into()),
-            ("debug-assertions".into(), false.into()),
-            ("overflow-checks".into(), false.into()),
-            ("incremental".into(), false.into()),
-            ("codegen-units".into(), 16.into()),
-        ]);
-        let mut profile = Table::new();
-        profile.insert("dev".into(), dev.into());
-        root.insert("profile".into(), profile.into());
+        let mut profile = table();
+        profile["opt-level"] = value(3);
+        profile["debug"] = value(false);
+        profile["debug-assertions"] = value(false);
+        profile["overflow-checks"] = value(false);
+        profile["incremental"] = value(false);
+        profile["codegen-units"] = value(16);
+        root["profile"]["dev"] = profile;
     }
 
     root
+}
+
+fn clone_if_exists(from: &DocumentMut, to: &mut DocumentMut, key: &str) {
+    if let Some(item) = from.get(key) {
+        to[key] = item.clone();
+    }
 }
 
 fn main_function() -> &'static str {
