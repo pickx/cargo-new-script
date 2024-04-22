@@ -112,7 +112,7 @@ fn shebang(nightly: bool, quiet: bool) -> String {
 
 /// currently, we only use the template manifest's `dependencies`.
 fn frontmatter_toml(release_profile: bool, template_manifest: Option<DocumentMut>) -> DocumentMut {
-    use toml_edit::{table, value};
+    use toml_edit::{table, value, Item, Table};
 
     let mut root = DocumentMut::new();
 
@@ -130,14 +130,22 @@ fn frontmatter_toml(release_profile: bool, template_manifest: Option<DocumentMut
     };
 
     if release_profile {
-        let mut profile = table();
-        profile["opt-level"] = value(3);
-        profile["debug"] = value(false);
-        profile["debug-assertions"] = value(false);
-        profile["overflow-checks"] = value(false);
-        profile["incremental"] = value(false);
-        profile["codegen-units"] = value(16);
-        root["profile"]["dev"] = profile;
+        let mut profile = {
+            let mut table = Table::new();
+            table.set_implicit(true);
+            Item::Table(table)
+        };
+
+        let mut dev = table();
+        dev["opt-level"] = value(3);
+        dev["debug"] = value(false);
+        dev["debug-assertions"] = value(false);
+        dev["overflow-checks"] = value(false);
+        dev["incremental"] = value(false);
+        dev["codegen-units"] = value(16);
+        
+        profile["dev"] = dev;
+        root["profile"] = profile;
     }
 
     root
